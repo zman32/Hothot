@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#59000000"
+    android:gravity="center">
+
+
+
+
+        <LinearLayout
+            android:id="@+id/the_Clock"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentTop="true"
+            android:gravity="top|center"
+            android:layoutDirection="ltr"
+            android:orientation="horizontal"
+            android:padding="5dp"
+            android:paddingBottom="0dp"
+            android:paddingTop="130dp">
+
+            <TextClock
+                android:id="@+id/Hour"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:format12Hour="hh"
+                android:gravity="right"
+                android:hint="10"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textAlignment="gravity"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="60dp"
+                android:textStyle="bold"
+
+
+                tools:targetApi="17" />
+
+            <TextClock
+                android:id="@+id/Sep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour=":"
+                android:hint=":"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="60dp"
+                android:textStyle="bold"
+                tools:targetApi="17" />
+
+
+            <TextClock
+                android:id="@+id/Minute"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:fontFamily="sans-serif"
+                android:format12Hour="mm"
+                android:hint="39"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="50dp"
+                android:textStyle="bold"
+                tools:targetApi="17" />
+
+            <TextClock
+                android:id="@+id/AmPm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:format12Hour="a"
+                android:hint="PM"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="25dp"
+                android:textStyle="bold"
+                tools:targetApi="17" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/the_Date"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="false"
+
+            android:layout_centerHorizontal="true"
+
+            android:layout_centerInParent="true"
+            android:layout_centerVertical="true"
+
+            android:gravity="bottom|center_horizontal"
+            android:orientation="horizontal"
+            android:padding="20dp"
+            android:paddingBottom="30dp">
+
+      <!--      <TextView
+                android:id="@+id/tmuted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Light Muted" />
+
+            <TextView
+                android:id="@+id/tvibrant"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Vibrant" />
+
+            <TextView
+                android:id="@+id/tmorevibrant"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="MoreVibrant" />-->
+
+            <TextClock
+                android:id="@+id/day"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="EEEE"
+                android:gravity="right"
+                android:hint="Sunday"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textAlignment="gravity"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                tools:targetApi="17" />
+
+            <TextClock
+                android:id="@+id/date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour=" dd "
+                android:gravity="right"
+                android:hint="01"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textAlignment="gravity"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="33sp"
+                android:textStyle="bold"
+                tools:targetApi="17" />
+
+
+            <TextClock
+                android:id="@+id/month"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="MMMM "
+                android:gravity="right"
+                android:hint="July"
+                android:shadowColor="@android:color/black"
+                android:shadowDx="3"
+                android:shadowDy="3"
+                android:shadowRadius="3"
+                android:textAlignment="gravity"
+                android:textColor="@android:color/holo_blue_bright"
+                android:textSize="20dp"
+                android:textStyle="bold"
+                tools:targetApi="17" />
+<!--//**
+            <TextView
+                android:id="@+id/testing"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="TextView" />
+**//-->
+
+        </LinearLayout>
+
+
+</RelativeLayout>
+
