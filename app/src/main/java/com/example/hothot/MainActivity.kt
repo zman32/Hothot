@@ -83,6 +83,8 @@ import com.example.hothot.data.SongEntity
 //import androidx.media3.session.MediaSession
 //import androidx.media3.ui.PlayerNotificationManager
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.res.painterResource
 
@@ -106,17 +108,19 @@ val displayText = mutableStateOf("Initial Text")
 val isShuffleEnabled = mutableStateOf(true)
 
 class MainActivity : ComponentActivity() {
-    private var mediaService: MediaService? = null
-    private var serviceBound = false
+    private var mediaService by mutableStateOf<MediaService?>(null)
+    private var serviceBound by mutableStateOf(false)
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as? MediaService.LocalBinder
-            mediaService = binder?.getService()
-            serviceBound = true
+            this@MainActivity.mediaService = binder?.getService()
+            this@MainActivity.serviceBound = true
+            Log.d("MainActivity", "Service connected, serviceBound: $serviceBound, mediaService: $mediaService")
         }
         override fun onServiceDisconnected(name: ComponentName?) {
-            serviceBound = false
-            mediaService = null
+            this@MainActivity.serviceBound = false
+            this@MainActivity.mediaService = null
+            Log.d("MainActivity", "Service disconnected, serviceBound: $serviceBound, mediaService: $mediaService")
         }
     }
 
@@ -149,7 +153,8 @@ class MainActivity : ComponentActivity() {
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 
         setContent {
-            BootScreen()
+            // Pass the state variables from MainActivity
+            BootScreen(mediaService = this.mediaService, serviceBound = this.serviceBound)
         }
 
         // Warm up cache in background
@@ -459,7 +464,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun BootScreen() {
+    fun BootScreen(mediaService: MediaService?, serviceBound: Boolean) {
         val context = LocalContext.current
         val sharedPreferences = remember { context.getSharedPreferences("MusicPlayerPrefs", MODE_PRIVATE) }
         val hasSelectedFolder = remember { mutableStateOf(sharedPreferences.getString("lastSelectedFolder", null) != null) }
@@ -496,7 +501,9 @@ class MainActivity : ComponentActivity() {
                         apply()
                     }
                     hasSelectedFolder.value = false
-                }
+                },
+                mediaService = mediaService,
+                serviceBound = serviceBound
             )
         } else {
             SelectMusicFolder(
@@ -596,7 +603,9 @@ class MainActivity : ComponentActivity() {
     fun MusicListScreen(
         errorMessage: MutableState<String?>, // Receive error state
         onSettingsClick: () -> Unit,
-        onFolderError: () -> Unit // Callback to handle scan errors
+        onFolderError: () -> Unit, // Callback to handle scan errors
+        mediaService: MediaService?,
+        serviceBound: Boolean
     ) {
         // Add this state for dialog visibility
         val showSettingsDialog = remember { mutableStateOf(false) }
@@ -623,12 +632,7 @@ class MainActivity : ComponentActivity() {
             mutableStateOf(sharedPreferences.getBoolean("isPlaying", false))
         }
         val isPlayingState = remember { mutableStateOf(false) }
-        LaunchedEffect(currentPlaying.value) {
-            while (true) {
-                isPlayingState.value = mediaService?.isPlaying() ?: false
-                kotlinx.coroutines.delay(300)
-            }
-        }
+        // Removed polling LaunchedEffect
 
         val backgroundColor = Color(0xFF0F110E)
         val rowBackgroundColor = Color(0xFF1D1F1B)
@@ -684,8 +688,8 @@ class MainActivity : ComponentActivity() {
         }
 
         // Register BroadcastReceiver for song changes
-        DisposableEffect(Unit) { // Simplified key
-            val receiver = object : BroadcastReceiver() {
+        DisposableEffect(Unit) { // Simplified key for song change receiver
+            val songChangedReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     val uriString = intent?.getStringExtra("songUri") ?: return
                     handleSongChange(uriString, mp3Files, currentPlaying, albumArt, context)
@@ -693,17 +697,36 @@ class MainActivity : ComponentActivity() {
             }
             ContextCompat.registerReceiver(
                 context,
-                receiver,
+                songChangedReceiver,
                 IntentFilter("com.example.hothot.ACTION_SONG_CHANGED"),
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
             onDispose {
-                context.unregisterReceiver(receiver)
+                context.unregisterReceiver(songChangedReceiver)
+            }
+        }
+
+        // Register BroadcastReceiver for playback state changes
+        DisposableEffect(context) { // Key on context
+            val playbackStateReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == MediaService.ACTION_PLAYBACK_STATE_CHANGED) {
+                        val isPlaying = intent.getBooleanExtra(MediaService.EXTRA_IS_PLAYING, false)
+                        isPlayingState.value = isPlaying
+                        Log.d("MainActivity", "BroadcastReceiver: Received ACTION_PLAYBACK_STATE_CHANGED, new isPlayingState: $isPlaying. Current song: ${currentPlaying.value?.title}")
+                    }
+                }
+            }
+            val intentFilter = IntentFilter(MediaService.ACTION_PLAYBACK_STATE_CHANGED)
+            ContextCompat.registerReceiver(context, playbackStateReceiver, intentFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+
+            onDispose {
+                context.unregisterReceiver(playbackStateReceiver)
             }
         }
 
         // Restore playback state immediately
-        LaunchedEffect(Unit) {
+        LaunchedEffect(Unit) { // This runs once when MusicListScreen is first composed
             val lastSongUri = sharedPreferences.getString("LastSongUri", null)
             if (lastSongUri != null) {
                 val song = mp3Files.find { it.uri.toString() == lastSongUri }
@@ -718,8 +741,21 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Initialize isPlayingState when mediaService is available
+        LaunchedEffect(mediaService, serviceBound) { // Keyed by the passed parameters
+            if (serviceBound && mediaService != null) {
+                // Service is connected, get the initial state
+                isPlayingState.value = mediaService.isPlaying()
+                Log.d("MainActivity", "InitialStateSync: MediaService available. Initial isPlayingState set to: ${isPlayingState.value}. Current song: ${currentPlaying.value?.title}")
+            } else {
+                // Optionally, handle the case where service is not bound or null, e.g., set isPlayingState to false
+                // isPlayingState.value = false
+                Log.d("MainActivity", "InitialStateSync: MediaService not available or not bound. serviceBound: $serviceBound, mediaService: $mediaService")
+            }
+        }
+
         // Load songs in background
-        LaunchedEffect(Unit) {
+        LaunchedEffect(Unit) { // This also runs once when MusicListScreen is first composed
             val startTime = System.currentTimeMillis()
 
             withContext(Dispatchers.IO) {
@@ -1156,31 +1192,31 @@ class MainActivity : ComponentActivity() {
             }
 
 
-                if (showSettingsDialog.value) {
-                    SettingsDialog(
-                        onDismiss = { showSettingsDialog.value = false },
-                        onSettingsChanged = { isAlpha ->
+            if (showSettingsDialog.value) {
+                SettingsDialog(
+                    onDismiss = { showSettingsDialog.value = false },
+                    onSettingsChanged = { isAlpha ->
 
-                            sharedPreferences.edit {
-                                putString("isAlpha", if (isAlpha) "yesSong" else "no")
-                             //   remove("folder_last_modified") // Force rescan
-                                apply()
-                            }
+                        sharedPreferences.edit {
+                            putString("isAlpha", if (isAlpha) "yesSong" else "no")
+                            //   remove("folder_last_modified") // Force rescan
+                            apply()
+                        }
 
-                            coroutineScope.launch {
-                                val folderUri = selectedFolderUri.value ?: return@launch
-                                val songs = loadSongsWithRoom(context, folderUri, sharedPreferences, isAlpha)
-                                withContext(Dispatchers.Main) {
-                                    mp3Files.clear()
-                                    mp3Files.addAll(songs)
-                                    lazyListState.scrollToItem(0) // Scroll to top after refresh
-                                    Log.d("Sorting", "CLICKED SORT Loading songs with alpha sort: $isAlpha")
-                                    //Log.d("Sorting", "First song: ${songs.firstOrNull()?.title}")
-                                }
+                        coroutineScope.launch {
+                            val folderUri = selectedFolderUri.value ?: return@launch
+                            val songs = loadSongsWithRoom(context, folderUri, sharedPreferences, isAlpha)
+                            withContext(Dispatchers.Main) {
+                                mp3Files.clear()
+                                mp3Files.addAll(songs)
+                                lazyListState.scrollToItem(0) // Scroll to top after refresh
+                                Log.d("Sorting", "CLICKED SORT Loading songs with alpha sort: $isAlpha")
+                                //Log.d("Sorting", "First song: ${songs.firstOrNull()?.title}")
                             }
                         }
-                    )
-                }
+                    }
+                )
+            }
 
             if (showSearchDialog.value) {
                 SearchDialog(
@@ -1353,8 +1389,8 @@ class MainActivity : ComponentActivity() {
     ) {
         val context = LocalContext.current
         val sharedPreferences = remember { context.getSharedPreferences("MusicPlayerPrefs", MODE_PRIVATE) }
-      //  var isAlpha by remember { mutableStateOf(sharedPreferences.getString("isAlpha", "no") == "yesSong") }
- var isAlpha by remember { mutableStateOf(sharedPreferences.getString("isAlpha", "no") == "yesSong") }
+        //  var isAlpha by remember { mutableStateOf(sharedPreferences.getString("isAlpha", "no") == "yesSong") }
+        var isAlpha by remember { mutableStateOf(sharedPreferences.getString("isAlpha", "no") == "yesSong") }
         AlertDialog(
             onDismissRequest = onDismiss,
             title = {
@@ -1421,6 +1457,7 @@ class MainActivity : ComponentActivity() {
         modifier: Modifier = Modifier,
         albumArtColors: PaletteUtil.AlbumArtColors
     ) {
+        Log.d("MainActivity", "NowPlayingBottomBar recomposing. isPlaying parameter: $isPlaying. Current song: $songName")
         val backgroundColor = Color(0xCC1D1F1B)
         val textColor = Color.White
         val context = LocalContext.current
@@ -1514,11 +1551,12 @@ class MainActivity : ComponentActivity() {
             }
 
             IconButton(onClick = {
+                Log.d("MainActivity", "NowPlayingBottomBar: onPlayPause clicked. Current isPlaying parameter (before toggle): $isPlaying")
                 togglePlayPauseWithService()
             }) {
                 Icon(
-                    imageVector = if (mediaService?.isPlaying() == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (mediaService?.isPlaying() == true) "Pause" else "Play",
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
                     modifier = Modifier.size(32.dp),
                     tint = Color.White
                 )

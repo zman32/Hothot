@@ -48,8 +48,13 @@ import android.graphics.Typeface
 
 
 class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener {
+    companion object {
+        const val ACTION_PLAYBACK_STATE_CHANGED = "com.example.hothot.ACTION_PLAYBACK_STATE_CHANGED"
+        const val EXTRA_IS_PLAYING = "isPlaying"
+    }
+
     private val binder = LocalBinder()
-     var mediaPlayer: MediaPlayer? = null
+    var mediaPlayer: MediaPlayer? = null
     private val playlist = mutableListOf<Pair<String, Uri>>()
     private var currentIndex = 0
     private var shuffleEnabled = false
@@ -65,6 +70,13 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
             setOnErrorListener(this@MediaService)
         }
         shuffleEnabled = sharedPreferences.getBoolean("shuffle_enabled", false)
+    }
+
+    private fun sendPlaybackStateChangedBroadcast(isPlaying: Boolean) {
+        Log.d("MediaService", "Broadcasting ACTION_PLAYBACK_STATE_CHANGED, isPlaying: $isPlaying")
+        val intent = Intent(ACTION_PLAYBACK_STATE_CHANGED)
+        intent.putExtra(EXTRA_IS_PLAYING, isPlaying)
+        sendBroadcast(intent)
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -95,9 +107,10 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
     }
 
     fun playPause() {
+        Log.d("MediaService", "playPause called. Current isPlaying: ${mediaPlayer?.isPlaying}")
         android.util.Log.d("MediaService", "playPause called. isPlaying=${mediaPlayer?.isPlaying}, isPrepared=$isPrepared, currentIndex=$currentIndex, playlistSize=${playlist.size}")
         if (mediaPlayer?.isPlaying == true) {
-            pause()
+            pause() // Already calls sendPlaybackStateChangedBroadcast(false)
         } else {
             if (isPrepared) {
                 android.util.Log.d("MediaService", "Resuming playback with start()")
@@ -107,6 +120,7 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
                     android.util.Log.d("MediaService", "Seeked to lastPosition: $lastPosition")
                 }
                 mediaPlayer?.start()
+                sendPlaybackStateChangedBroadcast(true)
                 sharedPreferences.edit {
                     putBoolean("isPlaying", true)
                     apply()
@@ -137,7 +151,9 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
     }
 
     fun pause() {
+        Log.d("MediaService", "pause called. Current isPlaying: ${mediaPlayer?.isPlaying}")
         mediaPlayer?.pause()
+        sendPlaybackStateChangedBroadcast(false)
         sharedPreferences.edit {
             putBoolean("isPlaying", false)
             putInt("lastPosition", mediaPlayer?.currentPosition ?: 0)
@@ -236,6 +252,7 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
     }
 
     override fun onPrepared(mp: MediaPlayer?) {
+        Log.d("MediaService", "onPrepared. sharedPreferences isPlaying: ${sharedPreferences.getBoolean("isPlaying", false)}. mediaPlayer isPlaying: ${mp?.isPlaying}")
         android.util.Log.d("MediaService", "onPrepared called")
         isPrepared = true
         if (sharedPreferences.getBoolean("isPlaying", false)) {
@@ -245,16 +262,25 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
                 android.util.Log.d("MediaService", "Seeked to lastPosition: $lastPosition")
             }
             mp?.start()
+            sendPlaybackStateChangedBroadcast(true)
             startForegroundWithNotification()
             android.util.Log.d("MediaService", "Started playback")
         } else {
             android.util.Log.d("MediaService", "Prepared but not playing (isPlaying=false)")
-
+            sendPlaybackStateChangedBroadcast(false)
             updateNotification() // Add this line
         }
     }
 
     override fun onCompletion(mp: MediaPlayer?) {
+        // Assuming completion means playback stops before next() is called,
+        // or if next() doesn't immediately start something.
+        // If next() guarantees a new playback, this might be redundant
+        // if onPrepared also sends a broadcast.
+        // However, if the playlist is empty after this song, it will stop.
+        if (playlist.getOrNull((currentIndex + 1) % playlist.size) == null && !shuffleEnabled) { // Check if next song exists
+            sendPlaybackStateChangedBroadcast(false)
+        }
         next()
     }
 
@@ -262,6 +288,7 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
         android.util.Log.e("MediaService", "MediaPlayer error: what=$what, extra=$extra")
         isPrepared = false
         mediaPlayer?.reset()
+        sendPlaybackStateChangedBroadcast(false)
         next()
         return true
     }
@@ -301,9 +328,9 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
 
 // Prefer vibrant > lightVibrant > muted > dominant
                     val bgSwatch = palette.dominantSwatch
-                     //   ?: palette.lightVibrantSwatch
-                      //  ?: palette.mutedSwatch
-                       // ?: palette.dominantSwatch
+                    //   ?: palette.lightVibrantSwatch
+                    //  ?: palette.mutedSwatch
+                    // ?: palette.dominantSwatch
 
                     val backgroundColor = bgSwatch?.rgb ?: Color.DKGRAY
                     val textSwatch = listOf(
@@ -321,9 +348,9 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
 
                     // val backgroundColor = palette.getDominantColor(Color.DKGRAY)
                     //val foregroundColor = if (isColorLight(backgroundColor)) Color.BLACK else Color.WHITE
-                 //   Log.d("NotifyColors", "Palette: bg=#${Integer.toHexString(backgroundColor)}, fg=#${Integer.toHexString(foregroundColor)}")
+                    //   Log.d("NotifyColors", "Palette: bg=#${Integer.toHexString(backgroundColor)}, fg=#${Integer.toHexString(foregroundColor)}")
                     Log.d("Notify", "ran start forgrounnd notification")
-                  //  android.util.Log.e("MediaService", "Error preparing song for resume", e)
+                    //  android.util.Log.e("MediaService", "Error preparing song for resume", e)
                     contentView.setInt(R.id.root, "setBackgroundColor", backgroundColor)
                     contentView.setTextColor(R.id.title, foregroundColor)
                     contentView.setTextColor(R.id.text, foregroundColor)
@@ -422,6 +449,8 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
                         if (position > 0) {
                             mediaPlayer?.seekTo(position)
                         }
+                        Log.d("MediaService", "PREPARE_SONG action. Setting isPlaying to false.")
+                        sendPlaybackStateChangedBroadcast(false) // Prepared but not playing
                         // Do not start playback here!
                         android.util.Log.d("MediaService", "Prepared song for resume: $songUri at $position with playlist from Room")
                     } catch (e: Exception) {
