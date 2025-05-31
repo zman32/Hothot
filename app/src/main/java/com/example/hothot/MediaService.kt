@@ -390,9 +390,34 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
         }
 
         // Set click actions
+
+        // Create the intent to bring MainActivity to foreground
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+        }
+
+        val launchPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // end Create the intent to bring MainActivity to foreground
+
         contentView.setOnClickPendingIntent(R.id.action_prev, PendingIntent.getService(this, 0, Intent(this, MediaService::class.java).apply { action = "com.example.hothot.WIDGET_PREV" }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         contentView.setOnClickPendingIntent(R.id.action_play_pause, PendingIntent.getService(this, 1, Intent(this, MediaService::class.java).apply { action = "com.example.hothot.WIDGET_PLAY_PAUSE" }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         contentView.setOnClickPendingIntent(R.id.action_next, PendingIntent.getService(this, 2, Intent(this, MediaService::class.java).apply { action = "com.example.hothot.WIDGET_NEXT" }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+
+        // Add PendingIntent to bring app to foreground when main areas clicked
+        contentView.setOnClickPendingIntent(R.id.title, launchPendingIntent)
+        contentView.setOnClickPendingIntent(R.id.text, launchPendingIntent)
+        contentView.setOnClickPendingIntent(R.id.image, launchPendingIntent)
+        contentView.setOnClickPendingIntent(R.id.root, launchPendingIntent)
+
+
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notification)

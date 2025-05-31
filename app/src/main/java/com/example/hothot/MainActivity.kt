@@ -88,6 +88,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.res.painterResource
 
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+
 val buttonsColor = Color(0xFF85E813)
 val searchTextColor = Color(0xFF000000)
 val backgroundColor = Color(0xFF0F110E)
@@ -766,11 +769,13 @@ class MainActivity : ComponentActivity() {
                     val sortAlpha = sharedPreferences.getString("isAlpha", "no") == "yesSong"
                     val songs = loadSongsWithRoom(context, uri, sharedPreferences, sortAlpha)
 
-                    withContext(Dispatchers.Main) {
-                        mp3Files.clear()
-                        mp3Files.addAll(songs)
-                        Log.d("MusicPlayerAlpha", "(launched Effect) Loaded ${mp3Files.size} songs in ${System.currentTimeMillis() - startTime}ms")
+                    mp3Files.clear()
+                    if (songs.isEmpty()) {
+                        errorMessage.value = "No MP3 files found in the selected folder. Please try another folder."
+                        onFolderError()
+                        return@withContext
                     }
+                    mp3Files.addAll(songs)
                 }
             }
         }
@@ -1467,6 +1472,14 @@ class MainActivity : ComponentActivity() {
                 .fillMaxWidth()
                 .height(70.dp)
                 .clickable { onClick() }
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { change, dragAmount ->
+                        // Detect swipe up
+                        if (dragAmount < -20f) { // negative = upwards swipe
+                            onClick()
+                        }
+                    }
+                }
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
