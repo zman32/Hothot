@@ -4,6 +4,8 @@
     android:initialLayout="@layout/app_widget_clock"
 
     android:resizeMode="horizontal|vertical"
+    android:minWidth="146dp" 
+    android:minHeight="40dp"
     android:updatePeriodMillis="0"
     android:widgetCategory="keyguard|home_screen"
     tools:ignore="UnusedAttribute"

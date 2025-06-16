@@ -45,7 +45,10 @@ import android.graphics.Shader
 import android.util.TypedValue
 
 import android.graphics.Typeface
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
 
+private lateinit var mediaSession: MediaSessionCompat
 
 class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener {
     companion object {
@@ -69,8 +72,27 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
             setOnPreparedListener(this@MediaService)
             setOnErrorListener(this@MediaService)
         }
+        // MediaSession setup
+        mediaSession = MediaSessionCompat(this, "MediaService")
+        mediaSession.isActive = true
         shuffleEnabled = sharedPreferences.getBoolean("shuffle_enabled", false)
     }
+
+    private fun updateMediaSessionMetadata(title: String, artist: String, albumArt: Bitmap?) {
+        val metadataBuilder = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+
+        if (albumArt != null) {
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, albumArt)
+        } else {
+            val defaultArt = BitmapFactory.decodeResource(resources, R.drawable.blank_album_art)
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, defaultArt)
+        }
+
+        mediaSession.setMetadata(metadataBuilder.build())
+    }
+
 
     private fun sendPlaybackStateChangedBroadcast(isPlaying: Boolean) {
         Log.d("MediaService", "Broadcasting ACTION_PLAYBACK_STATE_CHANGED, isPlaying: $isPlaying")
@@ -214,6 +236,25 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
         }
         //end deepseek
 
+
+        // Update metadata for car display
+        try {
+            val retriever = android.media.MediaMetadataRetriever()
+            retriever.setDataSource(applicationContext, uri)
+            val title = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE) ?: "Unknown Title"
+            val artist = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "Unknown Artist"
+            val art = retriever.embeddedPicture
+            val bitmap = art?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+            retriever.release()
+
+            updateMediaSessionMetadata(title, artist, bitmap)
+            
+        } catch (e: Exception) {
+            Log.e("MediaService", "Error updating MediaSession metadata", e)
+        }
+//end tooth
+
+
         val intent = Intent("com.example.hothot.ACTION_SONG_CHANGED")
         intent.putExtra("songUri", uri.toString())
         sendBroadcast(intent)
@@ -228,6 +269,26 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
             next()
         }
     }
+
+    private fun updatePlaybackState(isPlaying: Boolean) {
+        val position = mediaPlayer?.currentPosition?.toLong() ?: 0L
+        val state = if (isPlaying) {
+            android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
+        } else {
+            android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
+        }
+
+        val playbackState = android.support.v4.media.session.PlaybackStateCompat.Builder()
+            .setActions(
+                android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
+                        android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE
+            )
+            .setState(state, position, 1.0f)
+            .build()
+
+        mediaSession.setPlaybackState(playbackState)
+    }
+
 
     private fun updateWidgetWithCurrentSong() {
         val songPair = playlist.getOrNull(currentIndex)
@@ -262,12 +323,15 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
                 android.util.Log.d("MediaService", "Seeked to lastPosition: $lastPosition")
             }
             mp?.start()
+            updatePlaybackState(true)
             sendPlaybackStateChangedBroadcast(true)
             startForegroundWithNotification()
             android.util.Log.d("MediaService", "Started playback")
         } else {
             android.util.Log.d("MediaService", "Prepared but not playing (isPlaying=false)")
             sendPlaybackStateChangedBroadcast(false)
+            updatePlaybackState(false)
+
             updateNotification() // Add this line
         }
     }
@@ -593,6 +657,7 @@ class MediaService : Service(), MediaPlayer.OnCompletionListener, MediaPlayer.On
 
 
     override fun onDestroy() {
+        mediaSession.release()
         mediaPlayer?.release()
         mediaPlayer = null
         super.onDestroy()
